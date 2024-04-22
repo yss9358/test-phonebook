@@ -1,0 +1,49 @@
+name: Deploy TestPhonebookApp
+
+on:
+  push:
+    branches:
+      - master # 또는 프로젝트의 기본 브랜치명
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v2
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build with Maven
+        run: mvn clean package
+
+      - name: Build Docker image
+        run: docker build . -t y2s9358/test-phonebook:latest
+
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Push Docker image to Docker Hub
+        run: docker push y2s9358/test-phonebook:latest
+        
+        
+  SSH:
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: ssh to ec2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            sudo docker pull y2s9358/test-phonebook:latest
+            sudo docker stop test-phonebook || true
+            sudo docker rm test-phonebook || true
+            sudo docker run -d --name test-phonebook -p 9005:9005 y2s9358/test-phonebook:latest
